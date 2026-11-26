@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ซ่อมบำรุง Mark Bio</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root { --main:#1F3864; --line:#e3e6ea; --muted:#6b7280; --ok:#2e7d32; --bad:#c62828; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Sarabun","Noto Sans Thai",Arial,sans-serif; background:#f5f6f8; color:#111; font-size:16px; }
+  header { background:var(--main); color:#fff; padding:14px 16px; font-weight:600; }
+  nav { display:flex; background:#fff; border-bottom:1px solid var(--line); }
+  nav button { flex:1; padding:12px 4px; border:0; background:none; font-size:15px; color:var(--muted); }
+  nav button.on { color:var(--main); font-weight:600; border-bottom:3px solid var(--main); }
+  main { padding:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:12px; }
+  label { display:block; font-size:14px; color:var(--muted); margin:12px 0 6px; }
+  input, select, textarea { width:100%; padding:12px; font-size:16px; border:1px solid #cfd4da; border-radius:8px; background:#fff; }
+  textarea { min-height:70px; }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  .toggle button { flex:1; padding:12px; border:1px solid #cfd4da; background:#fff; border-radius:8px; font-size:15px; }
+  .toggle button.on { background:var(--main); color:#fff; border-color:var(--main); }
+  .btn { width:100%; padding:14px; font-size:17px; border:0; border-radius:8px; background:var(--main); color:#fff; margin-top:16px; }
+  .btn.alt { background:#e8ebf0; color:#111; }
+  .btn.bad { background:var(--bad); }
+  .btn:disabled { opacity:.5; }
+  .muted { color:var(--muted); font-size:14px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:13px; color:#fff; }
+  .P1{background:#C62828}.P2{background:#EF6C00}.P3{background:#F9A825}.P4{background:#607D8B}
+  .msg { padding:12px; border-radius:8px; margin-bottom:12px; }
+  .msg.ok { background:#e8f5e9; color:var(--ok); } .msg.err { background:#ffebee; color:var(--bad); }
+  .thumbs img { width:72px; height:72px; object-fit:cover; border-radius:6px; margin:6px 6px 0 0; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>ซ่อมบำรุง Mark Bio <span id="who" class="muted" style="color:#cdd6e6;float:right"></span></header>
+<nav id="nav" class="hidden">
+  <button data-p="report">แจ้งซ่อม</button>
+  <button data-p="my">งานของฉัน</button>
+</nav>
+<main id="app"><p class="muted">กำลังโหลด…</p></main>
+
+<script>
+/* ===== ตั้งค่า: ใส่ค่าจริง 2 ค่านี้ก่อนอัปโหลด ===== */
+const LIFF_ID = '2012803762-2U50ZxRD';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzg1jhZbJiPP330STkaw16mnVrIALErAAEinqnDEZriOmLFtwRGPL0jLNUsPWOfBJIyPA/exec';
+/* ================================================= */
+
+const app = document.getElementById('app');
+const qs = new URLSearchParams(location.search);
+let ME = null, LISTS = null;
+
+async function api(action, data) {
+  const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({ action, data, idToken: liff.getIDToken() }) });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'เกิดข้อผิดพลาด');
+  return j.result;
+}
+
+function h(html) { app.innerHTML = html; }
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function flash(text, ok) { const d = document.createElement('div'); d.className = 'msg ' + (ok ? 'ok' : 'err'); d.textContent = text; app.prepend(d); window.scrollTo(0,0); }
+
+/** ย่อรูปเหลือด้านยาว 1600 px ก่อนส่ง */
+function shrink(file) {
+  return new Promise((ok, bad) => {
+    const img = new Image(), r = new FileReader();
+    r.onload = () => { img.src = r.result; };
+    img.onload = () => {
+      const s = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = img.width * s; c.height = img.height * s;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      ok(c.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = bad; r.readAsDataURL(file);
+  });
+}
+function photoInput(id, label, multiple) {
+  return `<label>${label}</label><input type="file" accept="image/*" capture="environment" id="${id}" ${multiple ? 'multiple' : ''}><div class="thumbs" id="${id}_t"></div>`;
+}
+const PHOTOS = {};
+function bindPhoto(id) {
+  const el = document.getElementById(id); if (!el) return;
+  el.onchange = async () => {
+    PHOTOS[id] = []; const t = document.getElementById(id + '_t'); t.innerHTML = '';
+    for (const f of [...el.files].slice(0, 3)) { const d = await shrink(f); PHOTOS[id].push(d); t.insertAdjacentHTML('beforeend', `<img src="${d}">`); }
+  };
+}
+function toggle(id, yes, no) {
+  return `<div class="row toggle" id="${id}"><button type="button" data-v="1">${yes}</button><button type="button" data-v="0">${no}</button></div>`;
+}
+function bindToggle(id) {
+  const box = document.getElementById(id);
+  box.querySelectorAll('button').forEach(b => b.onclick = () => { box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on'); box.dataset.v = b.dataset.v; });
+}
+const val = id => document.getElementById(id).value.trim();
+const tog = id => document.getElementById(id).dataset.v;
+
+/* ===== เริ่มต้น ===== */
+(async function init() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) return liff.login({ redirectUri: location.href });
+    ME = await api('me', {});
+    document.getElementById('who').textContent = ME.name || ME.displayName || '';
+    if (!ME.registered) return pageRegister();
+    if (ME.status !== 'Active') return h(`<div class="card">บัญชีของคุณรอหัวหน้าช่างอนุมัติ<br><span class="muted">ได้รับอนุมัติแล้วเปิดหน้านี้ใหม่อีกครั้ง</span></div>`);
+    LISTS = await api('lists', {});
+    const nav = document.getElementById('nav'); nav.classList.remove('hidden');
+    nav.querySelectorAll('button').forEach(b => b.onclick = () => go(b.dataset.p));
+    const p = qs.get('page');
+    if (qs.get('wo')) return go('job', qs.get('wo'));
+    go(p === 'my' ? 'my' : 'report');
+  } catch (e) { h(`<div class="msg err">${esc(e.message)}</div>`); }
+})();
+
+function go(page, arg) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.p === page));
+  if (page === 'report') pageReport();
+  else if (page === 'my') pageMy();
+  else if (page === 'job') pageJob(arg);
+}
+
+/* ===== ลงทะเบียน ===== */
+function pageRegister() {
+  h(`<div class="card"><b>ลงทะเบียนใช้งาน</b><p class="muted">ครั้งแรกครั้งเดียว หัวหน้าช่างจะอนุมัติให้</p>
+    <label>ชื่อ-นามสกุล (หรือชื่อเล่นที่ใช้ในโรงงาน)</label><input id="name">
+    <label>เบอร์โทร</label><input id="phone" inputmode="tel">
+    <label>แผนก</label><input id="dept" placeholder="เช่น ผลิต, QA, คลัง">
+    <button class="btn" id="go">ลงทะเบียน</button></div>`);
+  document.getElementById('go').onclick = async (e) => {
+    e.target.disabled = true;
+    try { const r = await api('register', { name: val('name'), phone: val('phone'), department: val('dept') });
+      h(`<div class="msg ok">${esc(r.message)}</div>`); }
+    catch (err) { flash(err.message); e.target.disabled = false; }
+  };
+}
+
+/* ===== แจ้งซ่อม ===== */
+function pageReport() {
+  const fromQr = qs.get('a');
+  const assets = LISTS.assets;
+  const buildings = [...new Set(assets.map(a => a.building))].sort();
+  h(`<div class="card">
+    <label>อาคาร</label><select id="bld"><option value="">เลือกอาคาร</option>${buildings.map(b => `<option>${b}</option>`).join('')}</select>
+    <label>เครื่อง</label><select id="asset"><option value="">เลือกเครื่อง</option></select>
+    <label>อาการ</label><select id="sym"><option value="">เลือกอาการ</option>${LISTS.symptoms.map(s => `<option value="${s.code}">${esc(s.text)}</option>`).join('')}</select>
+    <label>รายละเอียดเพิ่มเติม (ถ้ามี)</label><textarea id="txt"></textarea>
+    <label>เครื่องหยุดไหม?</label>${toggle('stop', 'หยุด', 'ยังเดินได้')}
+    <label>กระทบ Batch / การผลิตไหม?</label>${toggle('batch', 'กระทบ', 'ไม่กระทบ')}
+    ${photoInput('ph', 'ถ่ายรูปอาการ (สูงสุด 3 รูป)', true)}
+    <button class="btn" id="send">ส่งแจ้งซ่อม</button></div>`);
+  const sel = document.getElementById('asset'), bld = document.getElementById('bld');
+  const fill = b => { sel.innerHTML = '<option value="">เลือกเครื่อง</option>' + assets.filter(a => a.building === b).map(a => `<option value="${a.id}">${esc(a.name)} · ${a.id}</option>`).join(''); };
+  bld.onchange = () => fill(bld.value);
+  if (fromQr) { const a = assets.find(x => x.id === fromQr); if (a) { bld.value = a.building; fill(a.building); sel.value = a.id; } }
+  bindToggle('stop'); bindToggle('batch'); bindPhoto('ph');
+  document.getElementById('send').onclick = async (e) => {
+    if (!sel.value || !val('sym') || tog('stop') === undefined || tog('batch') === undefined) return flash('กรุณาเลือกเครื่อง อาการ และตอบ 2 คำถามให้ครบ');
+    e.target.disabled = true; e.target.textContent = 'กำลังส่ง…';
+    try {
+      const r = await api('report', { asset_id: sel.value, symptom_code: val('sym'), symptom_text: val('txt'),
+        machine_stopped: tog('stop') === '1', batch_affected: tog('batch') === '1', from_qr: fromQr === sel.value, photos: PHOTOS.ph || [] });
+      h(`<div class="msg ok">${esc(r.message)}<br>ความเร่งด่วน: <span class="pill ${r.priority}">${r.priority}</span></div>
+         <button class="btn alt" onclick="go('my')">ดูงานของฉัน</button>`);
+    } catch (err) { flash(err.message); e.target.disabled = false; e.target.textContent = 'ส่งแจ้งซ่อม'; }
+  };
+}
+
+/* ===== งานของฉัน ===== */
+async function pageMy() {
+  h('<p class="muted">กำลังโหลด…</p>');
+  try {
+    const list = await api('myJobs', {});
+    if (!list.length) return h('<div class="card">ไม่มีงานค้าง</div>');
+    h(list.map(j => `<div class="card" onclick="go('job','${j.wo}')">
+      <span class="pill ${j.priority}">${j.priority}</span> <b>${j.wo}</b><br>${esc(j.asset)}<br>
+      <span class="muted">${esc(j.status)}${j.technician ? ' · ' + esc(j.technician) : ''} · ${esc(j.reported)}</span></div>`).join(''));
+  } catch (e) { flash(e.message); }
+}
+
+/* ===== รายละเอียดใบงาน ===== */
+async function pageJob(wo) {
+  h('<p class="muted">กำลังโหลด…</p>');
+  let j;
+  try { j = await api('job', { wo }); } catch (e) { return flash(e.message); }
+  const ev = j.evidence.map(e => `<a href="${e.url}" target="_blank">${e.stage}</a>`).join(' · ') || '-';
+  let html = `<div class="card"><span class="pill ${j.priority}">${j.priority}</span> <b>${j.wo}</b> · ${esc(j.statusTh)}
+    <p><b>${esc(j.asset.name)}</b> (${j.asset.id}) · ${j.asset.building}</p>
+    <p class="muted">อาการ: ${esc(j.symptom)} ${esc(j.symptomText || '')}<br>ผู้แจ้ง: ${esc(j.reporter)} · ${esc(j.reported)}<br>
+    ช่าง: ${esc(j.technician || '-')}${j.rootCause ? '<br>สาเหตุ: ' + esc(j.rootCause) : ''}${j.action ? '<br>การแก้ไข: ' + esc(j.action) : ''}<br>หลักฐาน: ${ev}</p></div>`;
+
+  if (j.can.includes('ack')) html += `<button class="btn" id="ack">รับงาน</button>`;
+  if (j.can.includes('start')) html += `<div class="card"><b>เริ่มซ่อม</b>
+    <button class="btn alt" id="scan">สแกน QR ที่เครื่อง</button><p class="muted" id="scanres"></p>
+    <label>ถ้าสแกนไม่ได้ เลือกเหตุผล</label><select id="nosc"><option value="">-</option>${LISTS.noScanReasons.map(r => `<option value="${r.code}">${esc(r.text)}</option>`).join('')}</select>
+    ${j.asset.requiresLoto ? '<label><input type="checkbox" id="loto" style="width:auto"> ตัดไฟ/แขวนป้าย LOTO ระบายแรงดัน รอให้เย็นแล้ว</label>' : ''}
+    ${photoInput('pb', 'รูปก่อนซ่อม')}
+    <button class="btn" id="start">เริ่มซ่อม</button></div>`;
+  if (j.can.includes('finish')) html += `<div class="card"><b>ซ่อมเสร็จ</b>
+    <label>สาเหตุ</label><select id="rc"><option value="">เลือกสาเหตุ</option>${LISTS.rootCauses.map(r => `<option value="${r.code}">${esc(r.text)}</option>`).join('')}</select>
+    <label>การแก้ไข (พิมพ์หรือกดไมค์ที่คีย์บอร์ดเพื่อพูด)</label><textarea id="act"></textarea>
+    <label><input type="checkbox" id="noparts" style="width:auto"> ไม่ใช้อะไหล่</label>
+    <label>อะไหล่ที่ใช้ (ถ้ามี)</label><input id="parts" placeholder="เช่น เทปลอน 1 ชิ้น">
+    <label>ค่าแรง/ผู้รับเหมาภายนอก (บาท)</label><input id="ext" inputmode="numeric" placeholder="0">
+    ${photoInput('pa', 'รูปหลังซ่อม')}
+    <button class="btn" id="finish">บันทึกซ่อมเสร็จ</button>
+    <button class="btn alt" id="pause">รออะไหล่ / ผู้รับเหมา</button></div>`;
+  if (j.can.includes('supervisor')) html += reviewBox('supervisor', 'หัวหน้าตรวจรับงาน', 'ตรวจผ่าน', 'ส่งกลับให้ช่าง');
+  if (j.can.includes('accept')) html += reviewBox('accept', 'รับงานคืน', 'รับงานคืน เครื่องใช้ได้', 'ยังไม่เรียบร้อย');
+  if (j.can.includes('qa')) html += reviewBox('qa', 'QA ตรวจก่อนเดินเครื่อง', 'อนุมัติ พร้อมผลิต', 'ไม่ผ่าน');
+  h(html);
+
+  const run = async (btn, action, data, after) => {
+    btn.disabled = true;
+    try { const r = await api(action, data); flash(r.message, true); setTimeout(() => pageJob(wo), 900); }
+    catch (e) { flash(e.message); btn.disabled = false; }
+  };
+  const $ = id => document.getElementById(id);
+  if ($('ack')) $('ack').onclick = e => run(e.target, 'ack', { wo });
+  let scanned = '';
+  if ($('scan')) $('scan').onclick = async () => {
+    try { const r = await liff.scanCodeV2(); scanned = new URL(r.value).searchParams.get('a') || '';
+      $('scanres').textContent = scanned === j.asset.id ? 'สแกนตรงกับเครื่องนี้ ✓' : 'QR ไม่ตรงกับเครื่องในใบงาน (' + scanned + ')'; }
+    catch (e) { $('scanres').textContent = 'สแกนไม่ได้ กรุณาเลือกเหตุผลด้านล่าง'; }
+  };
+  bindPhoto('pb'); bindPhoto('pa');
+  if ($('start')) $('start').onclick = e => run(e.target, 'start', { wo, scanned_asset: scanned, no_scan_reason: $('nosc').value,
+    loto_done: $('loto') ? $('loto').checked : false, photo: (PHOTOS.pb || [])[0] });
+  if ($('finish')) $('finish').onclick = e => run(e.target, 'finish', { wo, root_cause_code: $('rc').value, action_taken: $('act').value,
+    no_parts: $('noparts').checked, parts_note: $('parts').value, external_cost: $('ext').value, photo: (PHOTOS.pa || [])[0] });
+  if ($('pause')) $('pause').onclick = e => { const reason = prompt('รออะไร? (เช่น อะไหล่ลูกปืน 6204)'); if (reason) run(e.target, 'finish', { wo, pause: true, reason }); };
+  ['supervisor', 'accept', 'qa'].forEach(k => {
+    if (!$(k + '_ok')) return;
+    $(k + '_ok').onclick = e => run(e.target, k, { wo, ok: true, approve: true });
+    $(k + '_no').onclick = e => { const reason = $(k + '_reason').value.trim(); if (!reason) return flash('กรุณาใส่เหตุผล'); run(e.target, k, { wo, ok: false, approve: false, reason }); };
+  });
+}
+
+function reviewBox(k, title, okText, noText) {
+  return `<div class="card"><b>${title}</b><button class="btn" id="${k}_ok">${okText}</button>
+    <label>เหตุผล (ถ้าส่งกลับ)</label><input id="${k}_reason"><button class="btn bad" id="${k}_no">${noText}</button></div>`;
+}
+</script>
+</body>
+</html>
